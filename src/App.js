@@ -1,9 +1,14 @@
 import React from 'react';
-import SearchBar, {fetchTracks} from './SearchBar';
-
+import SearchBar from './SearchBar';
+import { SpotifyLoginRedirect } from './spotify-access-token';
 
 function App() {
-  return <SearchBar/>
+    return (
+        <>
+            <SearchBar />
+            <SpotifyLoginRedirect />
+        </>
+    )
 }
 
 export default App;

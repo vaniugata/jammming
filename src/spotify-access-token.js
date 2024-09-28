@@ -1,93 +1,126 @@
-import { redirectToSpotifyLogin, ReturnToken } from "./spotifyLogin";
-import { refreshAccessToken } from "./refreshToken";
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { client_id, client_secret } from './credentials';
 
-// async function hasValidToken() {
-//     const token = localStorage.getItem('spotifyAccessToken');
-//     const expirationTime = localStorage.getItem('spotifyTokenExpiration');
+export function SpotifyLoginRedirect() {
 
-//     if (!token) {
-//         console.log('No access token found.');
-//         return false;
-//     }
+    const redirectUri = 'http://localhost:3000/callback';
+    const authEndpoint = 'https://accounts.spotify.com/authorize';
+    const scopes = ['user-read-private', 'playlist-read-private', 'playlist-modify-public', 'playlist-modify-private'];
 
-//     // Check if the token has expired
-//     const currentTime = Date.now();
-//     if (currentTime > expirationTime) {
-//         console.log('Access token has expired.');
-//         return false;
-//     }
+    const params = new URLSearchParams({
 
-//     // Token is still valid
-//     console.log('Access token is still valid.');
-//     return true;
-// }
+        client_id: client_id,
+        response_type: 'token',
+        redirect_uri: redirectUri,
+        scope: scopes.join(' ')
+    });
 
+    const url = `${authEndpoint}?${params.toString()}`;
 
+    return (
+        <div>
+            <a href={url}>
+                <button>Login to Spotify</button>
+            </a>
+        </div>
+    );
+};
 
-// async function getSpotifyAccessToken(client_id, client_secret) {
+export function Callback() {
+    const navigate = useNavigate();
+  
+    useEffect(() => {
+      // Extract the access token from the URL fragment
+       const hash = window.location.hash;
+      if (hash) {
+        const token = hash
+          .substring(1)
+          .split("&")
+          .find((elem) => elem.startsWith("access_token"))
+          ?.split("=")[1];
+  
+        if (token) {
+          // Store the token in localStorage
+          localStorage.setItem("user_token", token);
 
-//     if( hasValidToken() ) {
-//         const token = localStorage.getItem('spotifyAccessToken')
-//         return token
-//     }
-//     else
-//     {
-//          // encode credentials
-//         const credentials = btoa(`${client_id}:${client_secret}`);
+          // Navigate to dashboard or another page after storing token
+          navigate("/dashboard");
+        }
+      }
+    }, [navigate]);
+  
+    return (
+      <div>
+        <h1>Processing Spotify Callback...</h1>
+      </div>
+    );
+  };
 
-//         const requestOptions = {
-//             method: 'POST',
-//             headers: {
-//                 'Content-Type': 'application/x-www-form-urlencoded',
-//                 'Authorization': `Basic ${credentials}`
-//             },
-//             body: new URLSearchParams({
-//                 'grant_type': 'client_credentials'
-//             })
-//         };
+export async function HandleDevToken() {
 
-//         try {
-//             const response = await fetch('https://accounts.spotify.com/api/token', requestOptions);
-//             const data = await response.json();
+    const credentials = btoa(`${client_id}:${client_secret}`);
 
-//             if (response.ok) {
-//                 console.log('Access Token:', data.access_token);
-//                 const expirationTime = Date.now() + data.expires_in * 1000;
+    const requestOptions = {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': `Basic ${credentials}`
+        },
+        body: new URLSearchParams({
+            'grant_type': 'client_credentials'
+        })
+    };
 
-//                 // Store token, refresh token, and expiration time in local storage
-//                 localStorage.setItem('spotifyAccessToken', data.access_token);
-//                 localStorage.setItem('spotifyRefreshToken', data.refresh_token);
-//                 localStorage.setItem('spotifyTokenExpiration', expirationTime);
-            
-//                 return data.access_token;
-//             } else {
-//                 console.error('Error fetching the token:', data);
-//             }
-//         } catch (error) {
-//             console.error('Error during fetch:', error);
-//         }
-//     }
-// }
+    try {
 
-// export default getSpotifyAccessToken;
+        const token = localStorage.getItem('DevToken');
+        const has_expired = token !== undefined && Date.now() < localStorage.getItem("DevTokenExpiration");
 
+        if (token && !has_expired) {
+            return;
+        }
 
+        const response = await fetch('https://accounts.spotify.com/api/token', requestOptions);
+        const data = await response.json();
 
+        if (response.ok) {
+            console.log('Access Token:', data.access_token);
+            const expirationTime = Date.now() + data.expires_in * 1000;
 
-async function tokenIsValid() {
-    const token = localStorage.getItem('spotifyAccessToken');
-    const expirationTime = localStorage.getItem('spotifyTokenExpiration');
-
-    //if there is a token and it has not expired
-    const currentTime = Date.now();
-    if(!token) {
-        redirectToSpotifyLogin()
-        return null;
-    } else if(token && currentTime > expirationTime) {
-        const refreshedToken = await refreshAccessToken();
-        return refreshedToken;
-    } else {
-        return token;
+            localStorage.setItem('DevToken', data.access_token);
+            localStorage.setItem('DevRefreshToken', data.refresh_token);
+            localStorage.setItem('DevTokenExpiration', expirationTime);
+        } else {
+            console.error('Error fetching the token:', data);
+        }
+    } catch (error) {
+        console.error('Error during fetch:', error);
     }
-    
 }
+
+export function HandleUserToken() {
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        const token = localStorage.getItem('user_token');
+
+        if (token) {
+            fetch('https://api.spotify.com/v1/me', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            })
+            .then(  response => {try { response.json() } catch ( err ){console.log('Error fetching user data:', err); } })
+            .then( () => { navigate("/") } )
+        }
+
+    }, [navigate]);
+
+    return (
+        <div>
+            <h1>Spotify User Dashboard</h1>
+            <p>Loading user data...</p>
+        </div>
+    );
+};

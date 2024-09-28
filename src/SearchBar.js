@@ -3,11 +3,7 @@ import SearchResults from './SearchResults';
 import Playlist from './Playlist';
 import styles from './SearchBar.module.css';
 import style from './SearchResults.module.css'
-import getSpotifyAccessToken from './spotify-access-token';
-import { client_id, client_secret } from "./credentials";
-import { redirectToSpotifyLogin, Callback } from './spotifyLogin';
-
-
+import { HandleDevToken } from './spotify-access-token';
 
 export default function SearchBar() {
 
@@ -17,10 +13,12 @@ export default function SearchBar() {
     const [filteredSongs, setFilteredSongs] = useState([]);
     const [errorMessage, setErrorMessage] = useState('')
 
-    
+
 
     const fetchTracks = async (searchTerm) => {
-        const accessToken = await getSpotifyAccessToken(client_id, client_secret);
+        // const accessToken = localStorage.getItem('DevToken');
+        const accessToken = localStorage.getItem('user_token');
+
 
         const response = await fetch(`https://api.spotify.com/v1/search?type=track&q=${searchTerm}`, {
             headers: {
@@ -81,108 +79,88 @@ export default function SearchBar() {
     const handleNameChange = (event) => {
         setPlaylistName(event.target.value)
     }
-    //Get uris MOCKUP
-    // const savePlaylist = () => {
-    //     const trackUris = playlist.map(song => song.uri);
-    //     console.log('Saving playlist:', trackUris);
-    // };
 
-    //Save playlist to Spotify
+    const getUserId = async () => {
 
-    const getUserId = async (accessToken) => {
-        
+        const accessToken = localStorage.getItem('user_token')
         try {
             const response = await fetch('https://api.spotify.com/v1/me', {
                 headers: {
-                  'Authorization': `Bearer ${accessToken}`
+                    'Authorization': `Bearer ${accessToken}`
                 }
-              });
-            
-              const data = await response.json();
-              console.log(data)
-              return data.id; // Returns the user's Spotify ID
+            });
+
+            const data = await response.json();
+            console.log(data)
+            return data.id; // Returns the user's Spotify ID
         }
-        catch(error) {
+        catch (error) {
             console.error('Error getting ID', error);
         }
-      };
+    };
 
-
-      // Creating the playlist in Spotify
-
-      const createSpotifyPlaylist = async (userId, playlistName, accessToken) => {
+    const createSpotifyPlaylist = async (userId, playlistName, accessToken) => {
         try {
             const response = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
                 method: 'POST',
                 headers: {
-                  'Authorization': `Bearer ${accessToken}`,
-                  'Content-Type': 'application/json'
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                  name: playlistName,
-                  description: 'Playlist created from my app',
-                  public: false // Set to false if you want the playlist to be private
+                    name: playlistName,
+                    description: 'Playlist created from my app',
+                    public: false // Set to false if you want the playlist to be private
                 })
-              });
-            
-              const data = await response.json();
-              return data.id; // Returns the new playlist ID
+            });
+
+            const data = await response.json();
+            return data.id; // Returns the new playlist ID
         }
-        catch(error) {
+        catch (error) {
             console.error('Error creating Spotify playlist', error)
         }
 
-      };
+    };
 
 
-      //Add songs to playlist in Spotify
-        
-      const addTracksToPlaylist = async (playlistId, trackUris, accessToken) => {
+    //Add songs to playlist in Spotify
+
+    const addTracksToPlaylist = async (playlistId, trackUris, accessToken) => {
         try {
             await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
                 method: 'POST',
                 headers: {
-                  'Authorization': `Bearer ${accessToken}`,
-                  'Content-Type': 'application/json'
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                  uris: trackUris // Array of track URIs to add to the playlist
+                    uris: trackUris // Array of track URIs to add to the playlist
                 })
-              });
+            });
         }
-        catch(error) {
+        catch (error) {
             console.error('Error adding songs', error)
         }
-      };
-      
+    };
 
-      // Save the playlist in Spotify
 
-      const savePlaylist = async (playlistName, playlist) => {
+    // Save the playlist in Spotify
+
+    const savePlaylist = async (playlistName, playlist) => {
         try {
-          const accessToken = localStorage.getItem('spotifyAccessToken');
+            const token = localStorage.getItem('user_token');
+            const userId = await getUserId();
+            const playlistId = await createSpotifyPlaylist(userId, playlistName, token);
 
-          if (!accessToken) {
-            // No access token found, redirect to Spotify login to obtain one
-            redirectToSpotifyLogin();
-            return; // Exit the function after the redirect, will continue after user returns
-          }
+            const trackUris = playlist.map(song => song.uri);
+            await addTracksToPlaylist(playlistId, trackUris, token);
 
-          
-          const userId = await getUserId(accessToken); // Fetch the user’s ID
-          const playlistId = await createSpotifyPlaylist(userId, playlistName, accessToken); // Create a new playlist
-                                         
-          const trackUris = playlist.map(song => song.uri); // Map the tracks to their URIs
-          await addTracksToPlaylist(playlistId, trackUris, accessToken); // Add tracks to the playlist
-      
-          console.log('Playlist saved successfully!');
+            console.log('Playlist saved successfully!');
         } catch (error) {
-          console.error('Error saving playlist:', error);
+            console.error('Error saving playlist:', error);
         }
-      };
-      
-      
-
+    };
 
     return (
         <div>
@@ -192,7 +170,11 @@ export default function SearchBar() {
             <div className={styles.glassContainer}>
                 <h1 className={styles.h1}>Jammming</h1>
                 <div className={styles.searchBarForm}>
-                    <form onSubmit={handleSubmit}>
+                    <form onSubmit={(event) => {
+                        HandleDevToken();
+                        handleSubmit(event)
+                    }
+                    }>
                         <input type="text" value={searchBar} onChange={handleChange} placeholder='Search by title or artist'></input>
                         <button type='submit' className={styles.button}>Search</button>
                     </form>
@@ -210,13 +192,14 @@ export default function SearchBar() {
                     <div>
                         {
                             playlist.length > 0 &&
-                                <Playlist playlist={playlist}
-                                        playlistName={playlistName}
-                                        onRemove={removeSong}
-                                        onNameChange={handleNameChange}
-                                        savePlaylist={() => savePlaylist(playlistName, playlist)}
-                                        
-                                />
+                            <Playlist playlist={playlist}
+                                playlistName={playlistName}
+                                onRemove={removeSong}
+                                onNameChange={handleNameChange}
+                                savePlaylist={() => {
+                                    savePlaylist(playlistName, playlist);
+                                }}
+                            />
                         }
                     </div>
                 </div>
